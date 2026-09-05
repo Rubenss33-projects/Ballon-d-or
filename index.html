@@ -296,6 +296,12 @@
   .evol-legend-btn.is-hidden { opacity: .4; }
   .evol-legend-btn.is-hidden i { background: var(--ink-soft) !important; }
   .evol-month-marker { cursor: default; }
+  .evol-wrap { position: relative; }
+  .evol-tooltip {
+    position: absolute; pointer-events: none; z-index: 5; white-space: nowrap;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 10px; font-size: .74rem; line-height: 1.4; color: var(--ink); box-shadow: var(--shadow);
+  }
 
   /* ---- the store IS the editable UI when visible; hidden otherwise ---- */
   #store { display: none; flex-direction: column; gap: 28px; }
@@ -757,7 +763,6 @@ var AVATAR_PHOTOS = {
     }).join('');
 
     var visible = active.filter(function (n) { return !evolHidden[n]; });
-    var leaderName = active[0];
 
     var linesHTML = visible.map(function (n) {
       var dates = Object.keys(byPerson[n]).sort();
@@ -779,35 +784,54 @@ var AVATAR_PHOTOS = {
       var xEnd = xAt(xMaxTS);
       pts.push(xEnd + ',' + prevY);
       var color = avatarColor(n);
-      var isLeader = n === leaderName;
-
-      // one invisible-but-hoverable marker per month tick, showing that month's value
-      var markersHTML = ticks.map(function (ts) {
-        var valueAt = 0;
-        for (var i = 0; i < steps.length; i++) { if (steps[i].ts <= ts) valueAt = steps[i].cum; else break; }
-        var mx = xAt(ts), my = yAt(valueAt);
-        var d2 = new Date(ts);
-        return '<circle class="evol-month-marker" cx="' + mx + '" cy="' + my + '" r="6" style="fill:transparent">' +
-          '<title>' + n + ': ' + fmt(valueAt) + ' pts (1 ' + MONTH_NAMES[d2.getUTCMonth()] + (multiYear ? ' ' + d2.getUTCFullYear() : '') + ')</title></circle>';
-      }).join('');
-
-      var labelY = prevY - 10 < padT + 8 ? prevY + 16 : prevY - 10;
-      var endLabelHTML = isLeader
-        ? '<circle cx="' + xEnd + '" cy="' + prevY + '" r="7" style="fill:none;stroke:var(--gold)" stroke-width="1.5"/>' +
-          '<text x="' + (xEnd - 6) + '" y="' + labelY + '" text-anchor="end" style="fill:var(--gold)" font-size="10" font-weight="700">🏆 ' + escapeHtml(n) + '</text>'
-        : '';
+      var stepsAttr = escapeHtml(JSON.stringify(steps));
 
       return '<g data-person="' + n + '">' +
-        '<polyline points="' + pts.join(' ') + '" fill="none" style="stroke:' + color + '" stroke-width="' + (isLeader ? 3.5 : 2.5) + '" stroke-linejoin="round" stroke-linecap="round"><title>' + n + '</title></polyline>' +
-        '<circle cx="' + xEnd + '" cy="' + prevY + '" r="' + (isLeader ? 4.5 : 3.5) + '" style="fill:' + color + '"><title>' + n + ': ' + fmt(finalCum[n]) + ' pts</title></circle>' +
-        endLabelHTML +
-        markersHTML +
+        '<polyline points="' + pts.join(' ') + '" fill="none" style="stroke:' + color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '<circle cx="' + xEnd + '" cy="' + prevY + '" r="3.5" style="fill:' + color + '"></circle>' +
+        '<polyline class="evol-hit" data-person="' + escapeHtml(n) + '" data-color="' + color + '" data-steps="' + stepsAttr + '" points="' + pts.join(' ') + '" fill="none" stroke="transparent" stroke-width="14" style="cursor:crosshair"/>' +
         '</g>';
     }).join('');
 
     var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block">' + gridHTML + vlinesHTML + linesHTML + xLabelsHTML + '</svg>';
 
-    main.innerHTML = header + '<div class="board-wrap evol-wrap">' + svg + '</div><div class="evol-legend" id="evolLegend"></div>';
+    main.innerHTML = header + '<div class="board-wrap evol-wrap">' + svg + '<div class="evol-tooltip" id="evolTooltip" hidden></div></div><div class="evol-legend" id="evolLegend"></div>';
+
+    var wrapEl = document.querySelector('.evol-wrap');
+    var svgEl = wrapEl.querySelector('svg');
+    var tooltipEl = document.getElementById('evolTooltip');
+    var svgPt = svgEl.createSVGPoint();
+    function tsAtClientX(clientX) {
+      var ctm = svgEl.getScreenCTM();
+      if (!ctm) return null;
+      svgPt.x = clientX; svgPt.y = 0;
+      var local = svgPt.matrixTransform(ctm.inverse());
+      var frac = Math.min(1, Math.max(0, (local.x - padL) / plotW));
+      return xMinTS + frac * (xMaxTS - xMinTS);
+    }
+    function valueAtTS(steps, ts) {
+      var v = steps[0].cum;
+      for (var i = 0; i < steps.length; i++) { if (steps[i].ts <= ts) v = steps[i].cum; else break; }
+      return v;
+    }
+    Array.prototype.slice.call(svgEl.querySelectorAll('.evol-hit')).forEach(function (hit) {
+      var steps = JSON.parse(hit.dataset.steps);
+      var name = hit.dataset.person;
+      var color = hit.dataset.color;
+      hit.addEventListener('mousemove', function (e) {
+        var ts = tsAtClientX(e.clientX);
+        if (ts === null) return;
+        var val = valueAtTS(steps, ts);
+        var d = new Date(ts);
+        var dateLabel = d.getUTCDate() + ' ' + MONTH_NAMES[d.getUTCMonth()] + (multiYear ? ' ' + d.getUTCFullYear() : '');
+        tooltipEl.innerHTML = '<b style="color:' + color + '">' + escapeHtml(name) + '</b> · ' + fmt(val) + ' pts<br><span style="opacity:.7">' + dateLabel + '</span>';
+        tooltipEl.hidden = false;
+        var wrapRect = wrapEl.getBoundingClientRect();
+        tooltipEl.style.left = (e.clientX - wrapRect.left + 14) + 'px';
+        tooltipEl.style.top = (e.clientY - wrapRect.top - 12) + 'px';
+      });
+      hit.addEventListener('mouseleave', function () { tooltipEl.hidden = true; });
+    });
 
     var legendWrap = document.getElementById('evolLegend');
     active.forEach(function (n) {

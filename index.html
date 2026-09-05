@@ -2,7 +2,8 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ballon d'Or</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <title>Ballon d'Or</title>
 <style>
@@ -1352,7 +1353,7 @@ var AVATAR_PHOTOS = {
       if (html === lastKnownHTML) return;
       lastKnownHTML = html;
       setStatus('Guardando…', false);
-      sb.from('app_state').update({ store_html: html, updated_at: new Date().toISOString() }).eq('id', 'main').then(function (res) {
+      sb.from('app_state').upsert({ id: 'main', store_html: html, updated_at: new Date().toISOString() }).then(function (res) {
         if (res && res.error) {
           console.error('Ballon d\'Or: fallo al guardar en Supabase', res.error);
           setStatus('No se ha guardado: ' + (res.error.message || 'error desconocido'), true);
@@ -1386,17 +1387,21 @@ var AVATAR_PHOTOS = {
       applyingRemote = false;
     }
 
-    sb.from('app_state').select('store_html').eq('id', 'main').single().then(function (res) {
+    sb.from('app_state').select('store_html').eq('id', 'main').maybeSingle().then(function (res) {
       if (res && res.error) {
         console.error('Ballon d\'Or: fallo al leer de Supabase', res.error);
         setStatus('No se pudo cargar de la nube: ' + (res.error.message || 'error desconocido'), true);
+        return;
       }
       if (res && res.data && res.data.store_html) {
         applyRemote(res.data.store_html);
       } else {
         lastKnownHTML = store.innerHTML;
-        sb.from('app_state').update({ store_html: store.innerHTML, updated_at: new Date().toISOString() }).eq('id', 'main').then(function (r2) {
-          if (r2 && r2.error) console.error('Ballon d\'Or: fallo al sembrar Supabase', r2.error);
+        sb.from('app_state').upsert({ id: 'main', store_html: store.innerHTML, updated_at: new Date().toISOString() }).then(function (r2) {
+          if (r2 && r2.error) {
+            console.error('Ballon d\'Or: fallo al sembrar Supabase', r2.error);
+            setStatus('No se pudo sembrar la nube: ' + (r2.error.message || 'error desconocido'), true);
+          }
         });
       }
       sb.channel('app_state_sync')

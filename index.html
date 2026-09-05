@@ -784,12 +784,12 @@ var AVATAR_PHOTOS = {
       var xEnd = xAt(xMaxTS);
       pts.push(xEnd + ',' + prevY);
       var color = avatarColor(n);
-      var stepsAttr = escapeHtml(JSON.stringify(steps));
+      var stepsAttr = JSON.stringify(steps);
 
       return '<g data-person="' + n + '">' +
         '<polyline points="' + pts.join(' ') + '" fill="none" style="stroke:' + color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
         '<circle cx="' + xEnd + '" cy="' + prevY + '" r="3.5" style="fill:' + color + '"></circle>' +
-        '<polyline class="evol-hit" data-person="' + escapeHtml(n) + '" data-color="' + color + '" data-steps="' + stepsAttr + '" points="' + pts.join(' ') + '" fill="none" stroke="transparent" stroke-width="14" style="cursor:crosshair"/>' +
+        '<polyline class="evol-hit" data-person="' + escapeHtml(n) + '" data-color="' + color + '" data-steps=\'' + stepsAttr + '\' points="' + pts.join(' ') + '" fill="none" stroke="transparent" stroke-width="14" style="cursor:crosshair"/>' +
         '</g>';
     }).join('');
 

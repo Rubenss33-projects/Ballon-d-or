@@ -1325,12 +1325,21 @@ var AVATAR_PHOTOS = {
       var html = store.innerHTML;
       if (html === lastKnownHTML) return;
       lastKnownHTML = html;
-      sb.from('app_state').update({ store_html: html, updated_at: new Date().toISOString() }).eq('id', 'main').then(function () {});
+      sb.from('app_state').update({ store_html: html, updated_at: new Date().toISOString() }).eq('id', 'main').then(function (res) {
+        if (res && res.error) console.error('Ballon d\'Or: fallo al guardar en Supabase', res.error);
+      });
     }
     function scheduleSave() {
+      if (applyingRemote) return;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(saveNow, 700);
     }
+    // Typing directly into a score field only changes the input's `value`
+    // PROPERTY, never its HTML attribute — so a MutationObserver watching
+    // attributes never sees it. Listen for the same 'input'/'change' events
+    // the app already uses to re-render, so manual edits get saved too.
+    store.addEventListener('input', scheduleSave);
+    store.addEventListener('change', scheduleSave);
     var mo = new MutationObserver(function () { if (!applyingRemote) scheduleSave(); });
     mo.observe(store, { childList: true, subtree: true, attributes: true, characterData: true });
 
@@ -1346,11 +1355,14 @@ var AVATAR_PHOTOS = {
     }
 
     sb.from('app_state').select('store_html').eq('id', 'main').single().then(function (res) {
+      if (res && res.error) console.error('Ballon d\'Or: fallo al leer de Supabase', res.error);
       if (res && res.data && res.data.store_html) {
         applyRemote(res.data.store_html);
       } else {
         lastKnownHTML = store.innerHTML;
-        sb.from('app_state').update({ store_html: store.innerHTML, updated_at: new Date().toISOString() }).eq('id', 'main').then(function () {});
+        sb.from('app_state').update({ store_html: store.innerHTML, updated_at: new Date().toISOString() }).eq('id', 'main').then(function (r2) {
+          if (r2 && r2.error) console.error('Ballon d\'Or: fallo al sembrar Supabase', r2.error);
+        });
       }
       sb.channel('app_state_sync')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'app_state', filter: 'id=eq.main' }, function (payload) {

@@ -338,7 +338,8 @@
     </div>
     <div class="toolbar">
       <span class="badge" id="readonlyBadge" hidden>Solo lectura</span>
-      <button class="btn btn-ghost" id="quickAddBtn">+ Añadir quedada</button>
+      <span class="hint" id="syncStatus" style="max-width:none"></span>
+      <button class="btn btn-gold" id="quickAddBtn">+ Añadir quedada</button>
       <button class="btn btn-ghost" id="addSeasonBtn" hidden>+ Temporada</button>
       <button class="btn btn-gold" id="editToggle">Editar</button>
     </div>
@@ -1308,13 +1309,38 @@ var AVATAR_PHOTOS = {
     document.getElementById('readonlyBadge').hidden = true;
   }
 
+  // The public site: no manual "Editar" mode — everyone adds points only
+  // through "+ Añadir quedada", never by touching raw values directly.
+  function unlockStandaloneUI() {
+    document.getElementById('quickAddBtn').hidden = false;
+    document.getElementById('readonlyBadge').hidden = true;
+    document.getElementById('editToggle').hidden = true;
+    document.getElementById('addSeasonBtn').hidden = true;
+  }
+
   // Standalone hosting (outside claude.ai): no window.claude artifact-sync
   // available, so persist the store to Supabase instead — same #store
   // markup, same render()/refreshTotalsUI(), just a different save target.
   function setupSupabaseSync() {
-    if (typeof window.supabase === 'undefined') return;
+    var statusEl = document.getElementById('syncStatus');
+    var statusClearTimer = null;
+    function setStatus(text, isError) {
+      if (!statusEl) return;
+      clearTimeout(statusClearTimer);
+      statusEl.textContent = text;
+      statusEl.style.color = isError ? '#C0392B' : '';
+      if (!isError) statusClearTimer = setTimeout(function () { statusEl.textContent = ''; }, 2500);
+    }
+    if (typeof window.supabase === 'undefined') {
+      setStatus('No se pudo cargar Supabase (revisa tu conexión).', true);
+      return;
+    }
     var SUPABASE_URL = 'https://euqaynuezbzalgnvuxqy.supabase.co';
-    var SUPABASE_KEY = 'sb_publishable_Q2LREaeeOyslv-qqfYm9iQ_kXL3gnGe';
+    // Legacy anon JWT — kept instead of the newer "sb_publishable_" key
+    // because it is guaranteed compatible with whatever @2.x build of
+    // supabase-js the CDN resolves (the new key format needs a recent
+    // client version we can't pin here with certainty).
+    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1cWF5bnVlemJ6YWxnbnZ1eHF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzA0NDcsImV4cCI6MjEwMjgwNjQ0N30.39QG41dcxz06hLkW4C1hqCU7NEUgyqh3-ELQqyt3zOo';
     var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     var lastKnownHTML = store.innerHTML;
     var saveTimer = null;
@@ -1325,8 +1351,14 @@ var AVATAR_PHOTOS = {
       var html = store.innerHTML;
       if (html === lastKnownHTML) return;
       lastKnownHTML = html;
+      setStatus('Guardando…', false);
       sb.from('app_state').update({ store_html: html, updated_at: new Date().toISOString() }).eq('id', 'main').then(function (res) {
-        if (res && res.error) console.error('Ballon d\'Or: fallo al guardar en Supabase', res.error);
+        if (res && res.error) {
+          console.error('Ballon d\'Or: fallo al guardar en Supabase', res.error);
+          setStatus('No se ha guardado: ' + (res.error.message || 'error desconocido'), true);
+        } else {
+          setStatus('Guardado ✓', false);
+        }
       });
     }
     function scheduleSave() {
@@ -1355,7 +1387,10 @@ var AVATAR_PHOTOS = {
     }
 
     sb.from('app_state').select('store_html').eq('id', 'main').single().then(function (res) {
-      if (res && res.error) console.error('Ballon d\'Or: fallo al leer de Supabase', res.error);
+      if (res && res.error) {
+        console.error('Ballon d\'Or: fallo al leer de Supabase', res.error);
+        setStatus('No se pudo cargar de la nube: ' + (res.error.message || 'error desconocido'), true);
+      }
       if (res && res.data && res.data.store_html) {
         applyRemote(res.data.store_html);
       } else {
@@ -1377,7 +1412,7 @@ var AVATAR_PHOTOS = {
       if (artifact) unlockEditingUI();
     }).catch(function () {});
   } else {
-    unlockEditingUI();
+    unlockStandaloneUI();
     setupSupabaseSync();
   }
 })();

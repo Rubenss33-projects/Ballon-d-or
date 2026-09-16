@@ -302,6 +302,9 @@
     background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
     padding: 6px 10px; font-size: .74rem; line-height: 1.4; color: var(--ink); box-shadow: var(--shadow);
   }
+  .fiesta-night { border-bottom: 1px solid var(--line); }
+  .fiesta-night:last-child { border-bottom: none; }
+  .fiesta-night.is-open { color: var(--gold); }
 
   /* ---- the store IS the editable UI when visible; hidden otherwise ---- */
   #store { display: none; flex-direction: column; gap: 28px; }
@@ -473,6 +476,7 @@ var AVATAR_PHOTOS = {
   var currentSortKey = 'total';
   var evolHidden = {};
   var selectedWinnerYear = null;
+  var selectedFiestaNight = null;
 
   var AVATAR_COLORS = ['#C0392B','#D9822B','#C9A227','#6B9B37','#2E8B57','#1F9C86','#2A9D9D','#2E86C1','#5B5EA6','#7D3C98','#B33771','#C2185B'];
   function avatarColor(name) {
@@ -609,14 +613,24 @@ var AVATAR_PHOTOS = {
 
     var nightsHTML = '';
     if (nights.length) {
-      var rows = nights.map(function (n) {
+      var rows = nights.map(function (n, i) {
+        var key = n.date + '::' + n.venue;
+        var isOpen = selectedFiestaNight === key;
         var d = new Date(dateTS(n.date));
         var dateLabel = d.getUTCDate() + ' ' + MONTH_NAMES[d.getUTCMonth()];
-        var avatars = n.people.map(function (p) { return avatarHTML(p, 'avatar'); }).join('');
-        return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)">' +
+        var detailHTML = '';
+        if (isOpen) {
+          var peopleHTML = n.people.map(function (p) {
+            return '<span style="display:flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600">' + avatarHTML(p, 'avatar') + p + '</span>';
+          }).join('');
+          detailHTML = '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;padding:0 0 12px 64px">' + peopleHTML + '</div>';
+        }
+        return '<div class="fiesta-night' + (isOpen ? ' is-open' : '') + '" data-key="' + escapeHtml(key) + '">' +
+          '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;cursor:pointer">' +
           '<span style="font-size:.78rem;color:var(--ink-soft);width:52px;flex:none">' + dateLabel + '</span>' +
           '<span style="font-weight:600;font-size:.85rem;flex:1">' + escapeHtml(n.venue || 'Fiesta') + '</span>' +
-          '<span style="display:flex;gap:4px;flex-wrap:wrap;max-width:260px">' + avatars + '</span>' +
+          '<span style="font-size:.72rem;color:var(--ink-soft)">' + n.people.length + ' 👤' + (isOpen ? ' ▲' : ' ▼') + '</span>' +
+          '</div>' + detailHTML +
           '</div>';
       }).join('');
       nightsHTML = '<p class="section-title" style="margin-top:22px">Noches de fiesta</p>' +
@@ -624,6 +638,14 @@ var AVATAR_PHOTOS = {
     }
 
     main.innerHTML = metaHTML + tableHTML + nightsHTML;
+
+    Array.prototype.forEach.call(main.querySelectorAll('.fiesta-night'), function (el) {
+      el.addEventListener('click', function () {
+        var key = el.dataset.key;
+        selectedFiestaNight = selectedFiestaNight === key ? null : key;
+        renderFiestas();
+      });
+    });
   }
 
   function renderTabs() {

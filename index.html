@@ -706,10 +706,11 @@ var AVATAR_PHOTOS = {
     var anecStore = document.getElementById('anecdoteStore');
     var anecItems = anecStore ? Array.prototype.slice.call(anecStore.querySelectorAll('.anecdote-item')) : [];
     var anecHTML = '<p class="section-title">Anécdotas (para votar)</p>' +
-      '<div class="board-wrap" style="padding:10px 24px"><ol style="margin:0;padding:0;list-style:none">' +
+      '<div class="board-wrap" style="padding:10px 24px"><ol id="anecList" style="margin:0;padding:0;list-style:none">' +
       anecItems.map(function (it, i) {
-        return '<li style="display:flex;align-items:flex-start;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);font-size:1rem">' +
-          '<span class="pos-cell" style="width:28px;flex:none">' + (i + 1) + '</span>' +
+        return '<li class="anec-item" data-i="' + i + '" style="display:flex;align-items:flex-start;gap:10px;padding:14px 0;border-bottom:1px solid var(--line);font-size:1rem">' +
+          (canEditAnec ? '<span class="anec-drag" title="Arrastra para reordenar" style="touch-action:none;cursor:grab;color:var(--ink-soft);flex:none;padding:0 4px;font-size:1.1rem;line-height:1.4">⠿</span>' : '') +
+          '<span class="pos-cell anec-pos" style="width:24px;flex:none">' + (i + 1) + '</span>' +
           '<span style="flex:1">' + escapeHtml(it.getAttribute('data-text') || '') + '</span>' +
           (canEditAnec ? '<button type="button" class="anec-del" data-i="' + i + '" title="Quitar" style="border:none;background:transparent;color:var(--ink-soft);cursor:pointer;font-size:.9rem">✕</button>' : '') +
           '</li>';
@@ -752,6 +753,49 @@ var AVATAR_PHOTOS = {
         renderFiestas();
       });
     });
+
+    var anecListEl = document.getElementById('anecList');
+    if (anecListEl) {
+      Array.prototype.forEach.call(anecListEl.querySelectorAll('.anec-drag'), function (handle) {
+        handle.addEventListener('pointerdown', function (ev) {
+          ev.preventDefault();
+          var dragging = handle.closest('li');
+          dragging.classList.add('dragging');
+          dragging.style.opacity = '.5';
+
+          function renumber() {
+            Array.prototype.forEach.call(anecListEl.querySelectorAll('.anec-item'), function (liEl, i) {
+              var posEl = liEl.querySelector('.anec-pos');
+              if (posEl) posEl.textContent = String(i + 1);
+            });
+          }
+
+          function onMove(e) {
+            var target = document.elementFromPoint(e.clientX, e.clientY);
+            var overLi = target && target.closest ? target.closest('li.anec-item') : null;
+            if (overLi && overLi !== dragging && overLi.parentNode === dragging.parentNode) {
+              var rect = overLi.getBoundingClientRect();
+              var before = (e.clientY - rect.top) < rect.height / 2;
+              overLi.parentNode.insertBefore(dragging, before ? overLi : overLi.nextSibling);
+              renumber();
+            }
+          }
+          function onUp() {
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            dragging.classList.remove('dragging');
+            dragging.style.opacity = '';
+            var newOrder = Array.prototype.map.call(anecListEl.querySelectorAll('.anec-item'), function (liEl) {
+              return anecItems[+liEl.dataset.i];
+            });
+            newOrder.forEach(function (elNode) { anecStore.appendChild(elNode); });
+            renderFiestas();
+          }
+          document.addEventListener('pointermove', onMove);
+          document.addEventListener('pointerup', onUp);
+        });
+      });
+    }
 
     Array.prototype.forEach.call(main.querySelectorAll('.fiesta-night'), function (el) {
       el.addEventListener('click', function () {

@@ -684,7 +684,10 @@ var AVATAR_PHOTOS = {
       nights.forEach(function (n) {
         var site = splitVenue(n.venue).site;
         if (!site) return;
-        siteCounts[site] = (siteCounts[site] || 0) + 1;
+        // "Minigolf + Titus" was two sitios in one night — each counts on its own.
+        site.split('+').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (s) {
+          siteCounts[s] = (siteCounts[s] || 0) + 1;
+        });
       });
       var topSitesHTML = Object.keys(siteCounts)
         .sort(function (a, b) { return siteCounts[b] - siteCounts[a] || (a < b ? -1 : 1); })

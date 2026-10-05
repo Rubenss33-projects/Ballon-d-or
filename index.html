@@ -219,11 +219,12 @@
   .app.editing #editChrome { display: flex; }
   .hint { font-size: .82rem; color: var(--ink-soft); max-width: 46ch; }
 
-  #quickAdd, #winnersAdd {
+  #quickAdd, #winnersAdd, #anecdoteAdd {
     display: none; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
     padding: 16px 18px; margin-bottom: 24px; box-shadow: var(--shadow);
   }
   .app.editing #quickAdd, .app.quick-adding #quickAdd { display: block; }
+  .app.editing #anecdoteAdd, .app.anecdote-adding #anecdoteAdd { display: block; }
   #winnersAdd { border-color: var(--gold); }
   .quick-add-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 
@@ -264,7 +265,7 @@
     font: inherit; font-size: .85rem; background: var(--surface-2); border: 1px solid var(--line);
     border-radius: 7px; padding: 7px 9px; color: var(--ink);
   }
-  #waRanking, #waNote {
+  #waRanking, #waNote, #anNote {
     display: block; width: 100%; font: inherit; font-size: .8rem; font-variant-numeric: tabular-nums;
     background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
     color: var(--ink); resize: vertical; margin-bottom: 10px;
@@ -335,8 +336,6 @@
 </style>
 </head>
 <body>
-
-
 <div class="app" id="appRoot">
   <header class="topbar">
     <div class="brand">
@@ -391,6 +390,28 @@
     <div class="quick-add-people" id="qaPeople"></div>
     <button class="btn btn-gold" id="qaSubmit" type="button">+ Añadir puntos a quien asistió</button>
     <p class="qa-msg" id="qaMsg"></p>
+  </div>
+
+  <div id="anecdoteAdd">
+    <div class="quick-add-top">
+      <p class="section-title" style="margin:0">Añadir una anécdota</p>
+      <button class="btn btn-ghost" id="anecdoteAddClose" type="button">Cerrar</button>
+    </div>
+    <div class="quick-add-row">
+      <label>Temporada
+        <select id="anSeason"></select>
+      </label>
+      <label>Fecha
+        <input type="date" id="anDate">
+      </label>
+      <label>Sitio
+        <input type="text" id="anVenue" placeholder="Nombre del sitio">
+      </label>
+    </div>
+    <div class="quick-add-people" id="anPeople"></div>
+    <textarea id="anNote" rows="2" placeholder="Anécdota (lo que quieras contar)"></textarea>
+    <button class="btn btn-gold" id="anSubmit" type="button">+ Añadir anécdota</button>
+    <p class="qa-msg" id="anMsg"></p>
   </div>
 
   <div id="winnersAdd">
@@ -580,9 +601,11 @@ var AVATAR_PHOTOS = {
   function renderFiestas() {
     var main = document.getElementById('dashboard');
     var seasonEl = activeSeasonEl();
-    var metaHTML = activeSeason === HIST_ID
-      ? '<div class="season-meta"><h2>🪩 Fiestas — histórico</h2><span class="hint">Recuento de noches de fiesta, aparte de la puntuación</span></div>'
-      : '<div class="season-meta"><h2>🪩 Fiestas' + (seasonEl ? ' — ' + seasonEl.querySelector('.season-label-input').value : '') + '</h2><span class="hint">Recuento de noches de fiesta, aparte de la puntuación</span></div>';
+    var canAddAnecdote = document.getElementById('readonlyBadge').hidden && activeSeason !== HIST_ID;
+    var metaHTML = (activeSeason === HIST_ID
+      ? '<div class="season-meta"><h2>📖 Mejores anécdotas del año — histórico</h2><span class="hint">Recuento de noches de fiesta, aparte de la puntuación</span></div>'
+      : '<div class="season-meta"><h2>📖 Mejores anécdotas del año' + (seasonEl ? ' — ' + seasonEl.querySelector('.season-label-input').value : '') + '</h2><span class="hint">Recuento de noches de fiesta, aparte de la puntuación</span></div>') +
+      (canAddAnecdote ? '<button class="btn btn-gold" id="anecdoteAddBtn" type="button" style="margin-bottom:16px">+ Añadir anécdota</button>' : '');
 
     var ranking = computeFiestaRanking(activeSeason);
     var rowsHTML = ranking.map(function (r, i) {
@@ -613,6 +636,40 @@ var AVATAR_PHOTOS = {
       });
     });
     nights.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+
+    var venueMap = {};
+    nights.forEach(function (n) {
+      var v = (n.venue || '').trim();
+      if (!v || v.charAt(0) === '(') return;
+      if (!venueMap[v]) venueMap[v] = { venue: v, count: 0, peopleCount: {} };
+      venueMap[v].count++;
+      n.people.forEach(function (p) { venueMap[v].peopleCount[p] = (venueMap[v].peopleCount[p] || 0) + 1; });
+    });
+    var venueList = Object.keys(venueMap).map(function (k) {
+      var g = venueMap[k];
+      var people = Object.keys(g.peopleCount).sort(function (a, b) { return g.peopleCount[b] - g.peopleCount[a]; });
+      return { venue: g.venue, count: g.count, people: people, peopleCount: g.peopleCount };
+    }).sort(function (a, b) { return b.count - a.count; });
+
+    var venueHTML = '';
+    if (venueList.length) {
+      var venueRowsHTML = venueList.map(function (v, i) {
+        var peopleHTML = v.people.map(function (p) {
+          return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;margin:2px 8px 2px 0">' +
+            avatarHTML(p, 'avatar') + p + (v.peopleCount[p] > 1 ? ' ×' + v.peopleCount[p] : '') + '</span>';
+        }).join('');
+        return '<tr>' +
+          '<td class="pos-cell">' + (i + 1) + '</td>' +
+          '<td style="font-weight:600">' + escapeHtml(v.venue) + '</td>' +
+          '<td class="num-col"><span class="pts-val">' + v.count + '</span></td>' +
+          '<td style="padding:9px 16px">' + peopleHTML + '</td>' +
+          '</tr>';
+      }).join('');
+      venueHTML = '<p class="section-title" style="margin-top:22px">Por sitio</p>' +
+        '<div class="board-wrap"><table class="board"><thead><tr>' +
+        '<th>Pos.</th><th>Sitio</th><th class="num-col">Veces</th><th>Gente</th>' +
+        '</tr></thead><tbody>' + venueRowsHTML + '</tbody></table></div>';
+    }
 
     var nightsHTML = '';
     if (nights.length) {
@@ -651,7 +708,16 @@ var AVATAR_PHOTOS = {
         '<div class="board-wrap" style="padding:4px 20px">' + rows + '</div>';
     }
 
-    main.innerHTML = metaHTML + nightsHTML + '<p class="section-title" style="margin-top:22px">Clasificación</p>' + tableHTML;
+    main.innerHTML = metaHTML + nightsHTML + '<p class="section-title" style="margin-top:22px">Clasificación</p>' + tableHTML + venueHTML;
+
+    var anecdoteBtn = document.getElementById('anecdoteAddBtn');
+    if (anecdoteBtn) {
+      anecdoteBtn.addEventListener('click', function () {
+        appRoot.classList.add('anecdote-adding');
+        populateAnecdoteAdd();
+        document.getElementById('anecdoteAdd').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    }
 
     Array.prototype.forEach.call(main.querySelectorAll('.fiesta-night'), function (el) {
       el.firstElementChild.addEventListener('click', function () {
@@ -732,7 +798,7 @@ var AVATAR_PHOTOS = {
     var viewWrap = document.getElementById('viewToggle');
     viewWrap.style.display = activeSeason === WINNERS_ID ? 'none' : '';
     viewWrap.innerHTML = '';
-    [{ id: 'board', label: '🏆 Marcador' }, { id: 'evolution', label: '📈 Evolución' }, { id: 'fiestas', label: '🪩 Fiestas' }].forEach(function (v) {
+    [{ id: 'board', label: '🏆 Marcador' }, { id: 'evolution', label: '📈 Evolución' }, { id: 'fiestas', label: '📖 Mejores anécdotas' }].forEach(function (v) {
       var btn = document.createElement('button');
       btn.className = 'view-btn'; btn.type = 'button';
       btn.textContent = v.label;
@@ -1383,6 +1449,91 @@ var AVATAR_PHOTOS = {
     render();
   });
 
+  function populateAnecdoteAdd() {
+    var seasonSel = document.getElementById('anSeason');
+    var prevSeason = seasonSel.value;
+    seasonSel.innerHTML = '';
+    seasons().forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = s.dataset.id;
+      opt.textContent = s.querySelector('.season-label-input').value;
+      seasonSel.appendChild(opt);
+    });
+    if (prevSeason && seasonById(prevSeason)) seasonSel.value = prevSeason;
+    else if (activeSeasonEl()) seasonSel.value = activeSeason;
+
+    var dateInput = document.getElementById('anDate');
+    if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+
+    var peopleWrap = document.getElementById('anPeople');
+    if (!peopleWrap.children.length) {
+      PEOPLE.forEach(function (n) {
+        var label = document.createElement('label');
+        label.className = 'qa-chip';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.value = n;
+        var span = document.createElement('span');
+        span.innerHTML = avatarHTML(n, 'qa-avatar');
+        span.appendChild(document.createTextNode(n));
+        label.appendChild(cb); label.appendChild(span);
+        peopleWrap.appendChild(label);
+      });
+    }
+  }
+
+  document.getElementById('anecdoteAddClose').addEventListener('click', function () {
+    appRoot.classList.remove('anecdote-adding');
+  });
+
+  document.getElementById('anSubmit').addEventListener('click', function () {
+    var msg = document.getElementById('anMsg');
+    msg.className = 'qa-msg';
+    msg.textContent = '';
+
+    var seasonId = document.getElementById('anSeason').value;
+    var seasonEl = seasonById(seasonId);
+    if (!seasonEl) {
+      msg.className = 'qa-msg is-error';
+      msg.textContent = 'No se ha encontrado la temporada seleccionada — no se ha guardado nada.';
+      return;
+    }
+    var date = document.getElementById('anDate').value || new Date().toISOString().slice(0, 10);
+    var venue = document.getElementById('anVenue').value.trim();
+    var note = document.getElementById('anNote').value.trim();
+    var checked = Array.prototype.slice.call(document.querySelectorAll('#anPeople input:checked')).map(function (cb) { return cb.value; });
+
+    var log = seasonEl.querySelector('.fiesta-log');
+    var entry = document.createElement('div');
+    entry.className = 'fiesta-entry';
+    entry.setAttribute('data-date', date);
+    entry.setAttribute('data-venue', venue);
+    entry.setAttribute('data-people', checked.join(','));
+    entry.setAttribute('data-note', note);
+    entry.setAttribute('data-photo', '');
+    log.appendChild(entry);
+
+    checked.forEach(function (name) {
+      var personRow = seasonEl.querySelector('.person[data-name="' + name + '"]');
+      if (!personRow) return;
+      var fiestaInput = personRow.querySelector('.f-fiesta');
+      if (fiestaInput) {
+        setSyncedValue(fiestaInput, String((parseFloat(fiestaInput.value) || 0) + 1));
+        fiestaInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    document.getElementById('anVenue').value = '';
+    document.getElementById('anNote').value = '';
+    document.getElementById('anDate').value = '';
+    Array.prototype.forEach.call(document.querySelectorAll('#anPeople input:checked'), function (cb) { cb.checked = false; });
+    appRoot.classList.remove('anecdote-adding');
+    render();
+
+    var seasonLabel = seasonEl.querySelector('.season-label-input').value;
+    msg.className = 'qa-msg is-ok';
+    msg.textContent = 'Guardado: anécdota en ' + (venue || 'sitio sin nombre') + ' (' + seasonLabel + ', ' + date + ').';
+  });
+
   store.addEventListener('input', render);
   document.addEventListener('claude:edit', render);
 
@@ -1393,6 +1544,7 @@ var AVATAR_PHOTOS = {
     document.getElementById('readonlyBadge').hidden = false;
     appRoot.classList.remove('editing');
     appRoot.classList.remove('quick-adding');
+    appRoot.classList.remove('anecdote-adding');
     render();
   });
 

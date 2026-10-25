@@ -1760,12 +1760,12 @@ var AVATAR_PHOTOS = {
       setStatus('No se pudo cargar Supabase (revisa tu conexión).', true);
       return;
     }
-    var SUPABASE_URL = 'https://euqaynuezbzalgnvuxqy.supabase.co';
+    var SUPABASE_URL = 'https://frmwamfbvkuhhhniljzt.supabase.co';
     // Legacy anon JWT — kept instead of the newer "sb_publishable_" key
     // because it is guaranteed compatible with whatever @2.x build of
     // supabase-js the CDN resolves (the new key format needs a recent
     // client version we can't pin here with certainty).
-    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1cWF5bnVlemJ6YWxnbnZ1eHF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzA0NDcsImV4cCI6MjEwMjgwNjQ0N30.39QG41dcxz06hLkW4C1hqCU7NEUgyqh3-ELQqyt3zOo';
+    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZybXdhbWZidmt1aGhobmlsanp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4OTE5MjYsImV4cCI6MjEwODQ2NzkyNn0.aC8IAnXghpyNDD2XtcAntOzjJR-qlitBCkfbrzdwQy0';
     var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     var lastKnownHTML = store.innerHTML;
     var saveTimer = null;

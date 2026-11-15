@@ -274,16 +274,22 @@
   .qa-msg { font-size: .78rem; margin: 8px 0 0; min-height: 1.1em; }
   .qa-msg.is-error { color: #C0392B; font-weight: 600; }
   .qa-msg.is-ok { color: var(--pitch); font-weight: 600; }
-  .qa-chip { position: relative; }
-  .qa-chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .qa-chip { position: relative; display: inline-flex; align-items: center; }
+  .qa-chip input[type="checkbox"] { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
   .qa-chip span {
     display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 600; cursor: pointer;
     padding: 6px 12px 6px 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-soft);
     transition: all .12s ease;
   }
   .qa-chip span .qa-avatar { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: .65rem; color: #fff; font-weight: 700; object-fit: cover; flex: none; }
-  .qa-chip input:checked + span { background: var(--pitch); color: #fff; border-color: var(--pitch); }
-  .qa-chip input:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 1px; }
+  .qa-chip input[type="checkbox"]:checked + span { background: var(--pitch); color: #fff; border-color: var(--pitch); }
+  .qa-chip input[type="checkbox"]:focus-visible + span { outline: 2px solid var(--gold); outline-offset: 1px; }
+  .qa-chip-points {
+    display: none; width: 46px; margin-left: 4px; padding: 5px 4px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: .75rem;
+    position: relative; z-index: 2;
+  }
+  .qa-chip.is-checked .qa-chip-points { display: inline-block; }
 
   .evol-wrap { padding: 18px 20px 8px; }
   .evol-legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 4px 0 10px; }
@@ -388,6 +394,7 @@
       </label>
     </div>
     <div class="quick-add-people" id="qaPeople"></div>
+    <p class="hint" style="margin:-6px 0 10px">Al marcar a alguien aparece su propio campo de puntos — cámbialo si esa persona se fue antes o puntúa distinto (p.ej. 1,5 en vez de 3).</p>
     <button class="btn btn-gold" id="qaSubmit" type="button">+ Añadir puntos a quien asistió</button>
     <p class="qa-msg" id="qaMsg"></p>
   </div>
@@ -1377,7 +1384,19 @@ var AVATAR_PHOTOS = {
         var span = document.createElement('span');
         span.innerHTML = avatarHTML(n, 'qa-avatar');
         span.appendChild(document.createTextNode(n));
-        label.appendChild(cb); label.appendChild(span);
+        var ptsInput = document.createElement('input');
+        ptsInput.type = 'number'; ptsInput.step = '0.5'; ptsInput.className = 'qa-chip-points';
+        ptsInput.title = 'Puntos para ' + n + ' (p.ej. si se fue antes)';
+        ptsInput.addEventListener('click', function (e) { e.stopPropagation(); });
+        ptsInput.addEventListener('input', function () { ptsInput.dataset.touched = '1'; });
+        cb.addEventListener('change', function () {
+          label.classList.toggle('is-checked', cb.checked);
+          if (cb.checked && !ptsInput.dataset.touched) {
+            ptsInput.value = document.getElementById('qaPoints').value;
+          }
+          if (!cb.checked) { ptsInput.value = ''; delete ptsInput.dataset.touched; }
+        });
+        label.appendChild(cb); label.appendChild(span); label.appendChild(ptsInput);
         peopleWrap.appendChild(label);
       });
     }
@@ -1398,24 +1417,32 @@ var AVATAR_PHOTOS = {
     var date = document.getElementById('qaDate').value || new Date().toISOString().slice(0, 10);
     var catKey = document.getElementById('qaCat').value;
     var points = parseFloat(document.getElementById('qaPoints').value) || 0;
-    var checked = Array.prototype.slice.call(document.querySelectorAll('#qaPeople input:checked')).map(function (cb) { return cb.value; });
-    if (!checked.length) {
+    var checkedBoxes = Array.prototype.slice.call(document.querySelectorAll('#qaPeople input[type="checkbox"]:checked'));
+    if (!checkedBoxes.length) {
       msg.className = 'qa-msg is-error';
       msg.textContent = 'Marca al menos a una persona que haya asistido — si no, no se guarda nada.';
       return;
     }
-    if (!points) {
+    // Each person's own points input (editable, e.g. para quien se fue antes) overrides the shared value above.
+    var entries = checkedBoxes.map(function (cb) {
+      var chip = cb.closest('.qa-chip');
+      var ptsInput = chip ? chip.querySelector('.qa-chip-points') : null;
+      var personPoints = ptsInput && ptsInput.value !== '' ? parseFloat(ptsInput.value) : points;
+      return { name: cb.value, points: isNaN(personPoints) ? 0 : personPoints };
+    });
+    if (entries.some(function (e) { return !e.points; })) {
       msg.className = 'qa-msg is-error';
-      msg.textContent = 'Pon un valor de puntos distinto de 0 — no se ha guardado nada.';
+      msg.textContent = 'Pon un valor de puntos distinto de 0 para cada persona marcada — no se ha guardado nada.';
       return;
     }
 
-    checked.forEach(function (name) {
+    entries.forEach(function (e) {
+      var name = e.name, personPoints = e.points;
       var personRow = seasonEl.querySelector('.person[data-name="' + name + '"]');
       if (!personRow) return;
       var input = personRow.querySelector('.f-' + catKey);
       if (input) {
-        setSyncedValue(input, String((parseFloat(input.value) || 0) + points));
+        setSyncedValue(input, String((parseFloat(input.value) || 0) + personPoints));
         input.dispatchEvent(new Event('input', { bubbles: true }));
       }
       var asistInput = personRow.querySelector('.f-asist');
@@ -1429,7 +1456,7 @@ var AVATAR_PHOTOS = {
       entry.dataset.date = date;
       entry.dataset.person = name;
       entry.dataset.cat = catKey;
-      entry.dataset.points = String(points);
+      entry.dataset.points = String(personPoints);
       log.appendChild(entry);
     });
 
@@ -1439,12 +1466,21 @@ var AVATAR_PHOTOS = {
       groupInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
-    Array.prototype.forEach.call(document.querySelectorAll('#qaPeople input:checked'), function (cb) { cb.checked = false; });
+    checkedBoxes.forEach(function (cb) {
+      cb.checked = false;
+      var chip = cb.closest('.qa-chip');
+      if (chip) {
+        chip.classList.remove('is-checked');
+        var ptsInput = chip.querySelector('.qa-chip-points');
+        if (ptsInput) { ptsInput.value = ''; delete ptsInput.dataset.touched; }
+      }
+    });
     render();
 
     var seasonLabel = seasonEl.querySelector('.season-label-input').value;
+    var summary = entries.map(function (e) { return e.name + ' (+' + fmt(e.points) + ')'; }).join(', ');
     msg.className = 'qa-msg is-ok';
-    msg.textContent = 'Guardado: +' + fmt(points) + ' pts a ' + checked.join(', ') + ' (' + seasonLabel + ', ' + date + ').';
+    msg.textContent = 'Guardado: ' + summary + ' (' + seasonLabel + ', ' + date + ').';
   });
 
   function render() {
